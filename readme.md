@@ -1,3 +1,4 @@
+# vmware_clone
 # 使用方法
 
 ## 1：安装PowerCli环境。

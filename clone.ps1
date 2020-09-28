@@ -192,5 +192,5 @@ while($esxihost -ne "")
 #####################################################################################################################
 $WorkBook.Close()  
 $objExcel.Quit()
-Stop-Process -Name et
+Stop-Process -Name et,excel  2>$null
 write-host "虚拟机克隆全部完成" -foregroundcolor Green
