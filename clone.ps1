@@ -11,6 +11,7 @@ $diff_size = 50    # 当模板硬盘和克隆的新虚拟机硬盘大小，相�
 $vcenterhost = $vchost
 $spec="temp_spec"
 $doman="localdomain"
+$datastore_free_percent=0.1   # 存储剩余值低于10%，不克隆虚拟机。
 $FAILED=0     #用于记录失败次数
 $now= get-date -Format 'yyyy-MM-dd HH:mm:ss'
 
@@ -85,7 +86,7 @@ do
 	# Excel 列3--模板
 		$source = $WorkSheet.cells.item($x,3).Text.trim()
 		if ( $source -ne "" ) {
-			if (get-vm $source) {$source_tag= "-vm "} else {$source_tag = "-template "}
+			if (get-vm $source -ErrorAction Ignore) {$source_tag= " -vm "} else {$source_tag = " -template "}
 			$source= $source_tag + $source 
 		}
 	# Excel 列4--数据存储
@@ -97,7 +98,7 @@ do
 		$ip = $WorkSheet.cells.item($x,6).Text.trim()
 		$mask =     $WorkSheet.cells.item($x,7).Text.trim()
 		$gateway =  $WorkSheet.cells.item($x,8).Text.trim()
-	# Excel 列9--网络表情
+	# Excel 列9--网络标签
 		$net_tag =  $WorkSheet.cells.item($x,9).Text.trim()
 	# Excel 列10--虚拟机文件夹
 		$location = $WorkSheet.cells.item($x,10).Text.trim()
@@ -121,12 +122,25 @@ do
 		$cpunum =   $WorkSheet.cells.item($x,12).Text.trim()
         if ($cpunum -ne "") {$chcpu_tag=$true} else {$chcpu_tag=$false}
 	# Excel 列13--硬盘总大小-GB
-		$disksize =  $WorkSheet.cells.item($x,13).Text.trim()
-		if ($disksize -ne "") {$chdisk_tag=$true} else {$chdisk_tag=$false}
+		$new_disksize =  $WorkSheet.cells.item($x,13).Text.trim()
+		if ($new_disksize -ne "") {$chdisk_tag=$true} else {$chdisk_tag=$false}
 
 				
 		$custsysprep | Set-OScustomizationSpec -NamingScheme fixed -NamingPrefix $hostname   1>$null
         $custsysprep | Get-OSCustomizationNicMapping | Set-OSCustomizationNicMapping -IpMode UseStaticIP -IpAddress $ip -SubnetMask $mask -DefaultGateway $gateway  1>$null
+        
+        # 磁盘资源 预检查
+        $source_disksize= Invoke-Expression  "(get-harddisk $source |Measure-Object capacityGB -Sum).sum"
+        $datastore_freegb=(get-datastore $datastore).freespaceGB
+        $datastore_capacitygb=(get-datastore $datastore).capacityGB
+        if (($datastore_freegb - $source_disksize) / $datastore_capacitygb -lt $datastore_free_percent ) {
+            Write-Host "`n$now 存储空间不足" -ForegroundColor Yellow
+            $WorkSheet.cells.item($x,14) = "失败，存储不足"
+            continue
+        }
+       
+        
+        
         Write-Host "`n$now 开始从" ($source -split " ")[1] "---克隆---> $vmname " -ForegroundColor Green
         Invoke-Expression  "New-vm -name $vmname -vmhost $esxihost  $source -datastore $datastore -OSCustomizationspec $custsysprep $location -diskstorageformat thick"  1>$null
 	    
@@ -150,8 +164,8 @@ do
 		# 更改硬盘
 		if ($chdisk_tag ) {
 			Write-Host "---$now 指定了硬盘配置，开始为 $vmname 配置硬盘"　-ForegroundColor Green
-			$current_size= (get-vm $vmname|get-harddisk|Measure-Object CapacityGB -sum).sum
-			$remain_size=$disksize-$current_size
+			# $current_size= (get-vm $vmname|get-harddisk|Measure-Object CapacityGB -sum).sum
+			$remain_size=$new_disksize-$source_disksize
 			if ($remain_size -lt $diff_size )   {   # 原位添加
 			    Write-Host "---$now 原硬盘扩展 $remain_size GB"　-ForegroundColor Green
 				$last_disk= get-vm $vmname|get-harddisk|select -last 1
