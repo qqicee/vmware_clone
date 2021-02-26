@@ -166,16 +166,15 @@ do
 			Write-Host "---$now 指定了硬盘配置，开始为 $vmname 配置硬盘"　-ForegroundColor Green
 			# $current_size= (get-vm $vmname|get-harddisk|Measure-Object CapacityGB -sum).sum
 			$remain_size=$new_disksize-$source_disksize
-			if ($remain_size -lt $diff_size )   {   # 原位添加
+			if ($remain_size -lt $diff_size -and $remain_size -gt 0 )  {   # 原位添加
 			    Write-Host "---$now 原硬盘扩展 $remain_size GB"　-ForegroundColor Green
 				$last_disk= get-vm $vmname|get-harddisk|select -last 1
 				$last_disk_size=($last_disk|select -Property capacityGB).capacityGB
 				$last_disk|set-harddisk -capacityGB ($last_disk_size+$remain_size) -Confirm:$False   1>$null
 			}  
-			else   #> diff_size ,添加新硬盘
-			{
-		    Write-Host "---$now 新加硬盘 $remain_size GB"　-ForegroundColor Green
-			get-vm $vmname |new-harddisk -capacityGB $remain_size -Confirm:$False   1>$null	
+			elseif ( $remain_size -gt 0 ){   #> diff_size ,添加新硬盘
+				Write-Host "---$now 新加硬盘 $remain_size GB"　-ForegroundColor Green
+				get-vm $vmname |new-harddisk -capacityGB $remain_size -Confirm:$False   1>$null	
 			}
 		}
 		
